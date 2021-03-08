@@ -112,3 +112,21 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# project related files to ignore
+*.yaml
+*.h5
+*.log
+*.npz
+*.png 
+*.txt
+*.list
+*.list_final
+*.dat
+*~
+*.npy
+wpc*
+*.gif
+*.wav
+*.hdf5
+*.zip
