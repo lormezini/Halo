@@ -130,3 +130,4 @@ wpc*
 *.wav
 *.hdf5
 *.zip
+.vscode/
