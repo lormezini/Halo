@@ -4,7 +4,7 @@ from halotools.mock_observables import return_xyz_formatted_array,wp
 import numpy as np
 import time
 from multiprocessing import Pool, cpu_count
-import corner
+import emcee
 from Corrfunc.theory.wp import wp
 from numpy.linalg import inv
 import scipy.optimize as op
@@ -16,14 +16,17 @@ warnings.filterwarnings("ignore")
 from scipy.special import gamma
 from scipy.stats import chisquare, gaussian_kde
 from sklearn.neighbors import NearestNeighbors, KDTree
+import gc
+from tabcorr import TabCorr
 
-fname = "zehavi_smdpl_vmax_m21_1.h5"
-dname ='zehavi_data_file_21'
-param = 'vmax'
-threshold = 21
+fname = "/home/lom31/emcee_fits_tabcorr/mar_2021/zehavi_smdpl_vmax_m19_tabcorr_2.h5"
+dname ='zehavi_data_file_19'
+param = 'vmax_ml'
+threshold = -19
 out_file = "best_fit_lnprob_{}_m{}.npz".format(param,threshold)
 
 if '21' in dname:
+    import zehavi_data_file_21
     wp_ng_vals = zehavi_data_file_21.get_wp()[0:12]
     bin_edges = zehavi_data_file_21.get_bins()[0:12]
     cov_matrix = zehavi_data_file_21.get_cov()[0:11,0:11]
@@ -69,6 +72,14 @@ for f in files:
     log_prob_s.append(reader.get_log_prob(discard=1000, flat=False, thin=1))
     wps.append(reader.get_blobs(discard=1000))
 
+m,b = (0.3260532250619037, -1.6354239489541218)
+if param == 'vmax_ml':
+    s[0][:,:,0]=s[0][:,:,0]*(m)+(b)
+    s[0][:,:,3]=s[0][:,:,3]*(m)+(b)
+    s[0][:,:,4]=s[0][:,:,4]*(m)+(b)
+    s[0][:,:,1]=s[0][:,:,1]*m #sigma
+    s[0][:,:,2]=s[0][:,:,2]/m #alpha
+
 if len(files)>1:
     print('greater')
     samples = s[0]
@@ -77,7 +88,8 @@ if len(files)>1:
     for i in range(len(files)):
         if i+1 < len(s):
             samples = np.concatenate((samples,s[i+1]))
-            log_prob_samples = np.concatenate((log_prob_samples,log_prob_s[i+1]))
+            log_prob_samples = np.concatenate((log_prob_samples,
+                                               log_prob_s[i+1]))
             wp_samples = np.concatenate((wp_samples,wps[i+1]))
 else:
     samples = s[0]
@@ -87,7 +99,8 @@ else:
 # # Nearest Neighbor########
 #downsample, 20 chains, every 50th step
 #reshape so that it is nchains*length x nparams
-dsamples=samples[:,:20,:][::50,:].reshape(19600,5)
+dsamples = samples[:,:20,:][::50,:]
+dsamples=samples[:,:20,:][::50,:].reshape(dsamples.shape[0]*dsamples.shape[1],5)
 
 
 ####Prepare data for nearest neighbor search
@@ -112,8 +125,13 @@ data = dsamples[:, :6]
 # Reflect against hard prior boundaries
 # sigma_logM
 # determine this from corner plots and see which parameters are cut off by prior bounds
+"""
 data_new = np.copy(data)
 data_new[:, 1] = -data_new[:, 1]
+data = np.concatenate([data, data_new], axis=0)
+"""
+data_new = np.copy(data)
+data_new[:, 3] = 1.0 - (data_new[:, 3]-1.0)
 data = np.concatenate([data, data_new], axis=0)
 
 # rescaling the dimensions
@@ -134,7 +152,7 @@ idx_best = idx_best[mask]
 # select the top n_best points
 n_best = 500
 idx_best = idx_best[:n_best]
-
+gc.collect()
 
 #plt.hist(maxdist, 100, range=(np.min(maxdist)-0.2, np.percentile(maxdist, 99)))
 #plt.hist(maxdist[idx_best], 100, range=(np.min(maxdist)-0.2, np.percentile(maxdist, 99)))
@@ -162,26 +180,43 @@ if param == 'mvir':
 
     sats_occ_model =  Zheng07Sats(modulate_with_cenocc=True,threshold=threshold)
     sats_prof_model = NFWPhaseSpace()
-else:
+    halotab = TabCorr.read('smdpl_halo_mvir.hdf5')
+
+elif param == 'vmax':
     print('vmax')
     cens_occ_model = Zheng07Cens(prim_haloprop_key = 'halo_vmax',threshold=threshold)
     cens_prof_model = TrivialPhaseSpace()
 
     sats_occ_model =  Zheng07Sats(prim_haloprop_key = 'halo_vmax', modulate_with_cenocc=True,threshold=threshold)
     sats_prof_model = NFWPhaseSpace()
+
+elif param == 'vmax_ml':
+    cens_occ_model = Zheng07Cens(prim_haloprop_key = 'vmax_ml',
+                                 threshold=threshold)
+    cens_prof_model = TrivialPhaseSpace()
+    sats_occ_model =  Zheng07Sats(prim_haloprop_key = 'vmax_ml', 
+                                  modulate_with_cenocc=True,
+                                  threshold=threshold)
+    sats_prof_model = NFWPhaseSpace()
+    halotab = TabCorr.read('smdpl_vmax_ml.hdf5')
     
 #halocat = CachedHaloCatalog(simname='bolshoi',redshift = 0.0)
 #halocat = CachedHaloCatalog(fname = '/Users/lmezini/.astropy/cache/halotools/halo_catalogs/bolplanck/rockstar/hlist_1.00231.list.halotools_v0p4.hdf5',update_cached_fname = True)
 #halocat = CachedHaloCatalog(fname = '/Users/lmezini/Downloads/hlist_1.00231.list.halotools_v0p1.hdf5',update_cached_fname = True)
-halocat = CachedHaloCatalog(fname='/Users/lmezini/.astropy/cache/halotools/halo_catalogs/SMDPL/rockstar/2019-07-03-18-38-02-9731.dat.my_cosmosim_halos.hdf5')
+halocat = CachedHaloCatalog(fname='/home/lom31/home/Halo/smdpl.dat.smdpl2.hdf5',update_cached_fname = True)
+if param == 'vmax_ml':
+    ht = halocat.halo_table
+    vmax_ml = 10**(np.log10(ht['halo_vmax'])*3.1069839419403174+5.015822745222037)
+    ht.add_column(vmax_ml, name='vmax_ml')
 halocat.redshift = 0.
 pi_max = 60.
 Lbox = 400.
+
 model_instance = HodModelFactory(centrals_occupation = cens_occ_model,
                                  centrals_profile = cens_prof_model, 
                                  satellites_occupation = sats_occ_model,
                                  satellites_profile = sats_prof_model)
-
+model_instance.populate_mock(halocat)
 nthreads = 4
 
 # number of repeats
@@ -200,7 +235,8 @@ for index in range(len(idx_best)):
 
     # Repeatedly populate galaxies and average lnL
     for repeat_index in range(nrepeat):
-
+        gc.collect()
+        """
         try:
             model_instance.mock.populate()
         except:
@@ -221,17 +257,22 @@ for index in range(len(idx_best)):
 
         mod = wp(Lbox,pi_max,1,bin_edges,pos_zdist[:,0],pos_zdist[:,1],pos_zdist[:,2],
                     verbose=True)
-        model_wp = mod['wp']
-        # log likelihood from wprp
+        
+        number_gal = len(model_instance.mock.galaxy_table)
+        """
+
+        ngal, model_wp = halotab.predict(model_instance)
+
+        # log likelihood
         wp_dev = model_wp - wp_ng_vals[1:len(wp_ng_vals)]
         wplike = -0.5*np.dot(np.dot(wp_dev, invcov), wp_dev)
 
         # log likelihood from number density
-        ngal = number_gal/(model_instance.mock.Lbox[0]**3)
-        ng_theory_error = ngal/np.sqrt(number_gal)
-        nglike = -0.5*((ngal-wp_ng_vals[0])**2/(ng_cov**2+ng_theory_error**2))
+        #ngal = number_gal/(model_instance.mock.Lbox[0]**3)
+        #ng_theory_error = ngal/np.sqrt(number_gal)
+        nglike = -0.5*((ngal-wp_ng_vals[0])**2/(ng_cov**2))#+ng_theory_error**2))
 
-        lnlike_all[index, repeat_index] = (wplike + nglike)
+        lnlike_all[index, repeat_index] = np.exp(wplike + nglike)
 
         #####################################################################
     
@@ -242,7 +283,7 @@ for index in range(len(idx_best)):
 np.savez_compressed(out_file, idx=idx_best, lnlike_all=lnlike_all)
 
 
-results = np.load('best_fit_lnprob_vmax_m20.npz')
+results = np.load(out_file)
 lnlike_all = results['lnlike_all']
 
 
@@ -267,9 +308,9 @@ def hlmean(data, multiplier=None, verbose=True):
         pairmean = np.sum(data[idx],axis=1)/2.
     return(np.median(pairmean))
 
-lnlike_hlmean = np.array([hlmean(lnlike_all[index]) for index in range(len(lnlike_all))])
+#lnlike_hlmean = np.array([hlmean(lnlike_all[index]) for index in range(len(lnlike_all))])
 lnlike_mean = np.mean(lnlike_all, axis=1)
-idx_single_best = idx_best[np.argsort(lnlike_hlmean)[-1]]
+idx_single_best = idx_best[np.argsort(lnlike_mean)[-1]]
 
 
 #plt.figure(figsize=(5, 5))
@@ -290,7 +331,7 @@ print(' -', params_best_minus[[0, 1, 2, 3, 4]])
 
 
 # Top 10 points
-idx_best_10 = idx_best[np.argsort(lnlike_hlmean)[-10:]]
+idx_best_10 = idx_best[np.argsort(lnlike_mean)[-10:]]
 nthreads = 4
 
 # number of repeats
@@ -308,12 +349,14 @@ for index in range(len(idx_best_10)):
 
     # Repeatedly populate galaxies and average lnL
     for repeat_index in range(nrepeat):
+        gc.collect()
 
         try:
             model_instance.mock.populate()
         except:
             model_instance.populate_mock(halocat)
 
+        """
         number_gal = len(model_instance.mock.galaxy_table)
         
         pos = return_xyz_formatted_array(model_instance.mock.galaxy_table['x'], 
@@ -337,9 +380,18 @@ for index in range(len(idx_best_10)):
         # log likelihood from number density
         ngal = number_gal/(model_instance.mock.Lbox[0]**3)
         ng_theory_error = ngal/np.sqrt(number_gal)
-        nglike = -0.5*((ngal-wp_ng_vals[0])**2/(ng_cov**2+ng_theory_error**2))
+        nglike = -0.5*((ngal-wp_ng_vals[0])**2/(ng_cov**2))#+ng_theory_error**2))
 
-        lnlike_all[index, repeat_index] = (wplike + nglike)
+        lnlike_all[index, repeat_index] = np.exp(wplike + nglike)
+        """
+        ngal, model_wp = halotab.predict(model_instance)
+
+        # log likelihood
+        wp_dev = model_wp - wp_ng_vals[1:len(wp_ng_vals)]
+        wplike = -0.5*np.dot(np.dot(wp_dev, invcov), wp_dev)
+
+        nglike = -0.5*((ngal-wp_ng_vals[0])**2/(ng_cov**2))
+        lnlike_all[index, repeat_index] = np.exp(wplike + nglike)
 
         #####################################################################
     
@@ -355,10 +407,10 @@ results = np.load('top10_'+out_file)
 lnlike_all = results['lnlike_all']
 
 np.random.seed(53)
-lnlike_hlmean = np.array([hlmean(lnlike_all[index], multiplier=50000) for index in range(len(lnlike_all))])
+#lnlike_hlmean = np.array([hlmean(lnlike_all[index], multiplier=50000) for index in range(len(lnlike_all))])
 lnlike_mean = np.mean(lnlike_all, axis=1)
 
-idx_single_best = idx_best_10[np.argsort(lnlike_hlmean)[-1]]
+idx_single_best = idx_best_10[np.argsort(lnlike_mean)[-1]]
 
 #plt.figure(figsize=(5, 5))
 #plt.errorbar(np.arange(len(lnlike_hlmean)), lnlike_hlmean[np.argsort(lnlike_hlmean)], 
@@ -404,12 +456,13 @@ for index in [0]:
 
     # Repeatedly populate galaxies and average lnL
     for repeat_index in range(nrepeat):
-
+        gc.collect()
         try:
             model_instance.mock.populate()
         except:
             model_instance.populate_mock(halocat)
 
+        """
         number_gal = len(model_instance.mock.galaxy_table)
         
         pos = return_xyz_formatted_array(model_instance.mock.galaxy_table['x'], 
@@ -433,9 +486,18 @@ for index in [0]:
         # log likelihood from number density
         ngal = number_gal/(model_instance.mock.Lbox[0]**3)
         ng_theory_error = ngal/np.sqrt(number_gal)
-        nglike = -0.5*((ngal-wp_ng_vals[0])**2/(ng_cov**2+ng_theory_error**2))
+        nglike = -0.5*((ngal-wp_ng_vals[0])**2/(ng_cov**2))#+ng_theory_error**2))
 
-        lnlike_all[index, repeat_index] = (wplike + nglike)
+        lnlike_all[index, repeat_index] = np.exp(wplike + nglike)
+        """
+        ngal, model_wp = halotab.predict(model_instance)
+
+        # log likelihood                                                        
+        wp_dev = model_wp - wp_ng_vals[1:len(wp_ng_vals)]
+        wplike = -0.5*np.dot(np.dot(wp_dev, invcov), wp_dev)
+                     
+        nglike = -0.5*((ngal-wp_ng_vals[0])**2/(ng_cov**2))
+        lnlike_all[index, repeat_index] = np.exp(wplike + nglike)
 
         #####################################################################
     
@@ -443,7 +505,7 @@ for index in [0]:
     print('{}  {:.0f} sec'.format(index, time_now-time_last))
     time_last = time_now
     
-np.savez_compressed('single_best_mock_results_{}_m{}.npz'.format(param,threshold), 
+np.savez_compressed('single_best_results_{}_m{}.npz'.format(param,threshold), 
                     lnlike_all=lnlike_all, bin_edges=bin_edges,
                     model_wp_all=model_wp_all, number_gal_all=number_gal_all)
 

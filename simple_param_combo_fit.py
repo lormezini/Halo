@@ -27,8 +27,8 @@ threshold = 21
 dname = "zehavi_data_file_21"
 param = "mvir"
 
-guess = [0.5, 14.0541, 0.36303, 0.6912, 14.09098, 14.25501]
-backend = emcee.backends.HDFBackend('combo_param_a50_m21.h5')
+guess = [ 0.25, 13.24,  1.13, 1.17, 14.15, 13.72]
+backend = emcee.backends.HDFBackend('combo_param_a25_m21.h5')
 
 
 if '21' in dname:
@@ -147,7 +147,7 @@ def _get_lnprob(theta):
         return -np.inf
     return lp + _get_lnlike(theta)
 
-ndim, nwalkers = 6, 20
+ndim, nwalkers = 6, 35
 nsteps = 150000
 #guess = [0.558, 8.172, 0.200, 1.411, 8.373, 8.937]
 pos = [guess + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
