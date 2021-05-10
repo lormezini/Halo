@@ -120,9 +120,9 @@ class fit_dict(dict):
 
             gc.collect()
             if 'vmax' in self['param']:
-                halotab = TabCorr.read('smdpl_vmax.hdf5')
+                halotab = TabCorr.read('smdpl_vmax_ml.hdf5')
             else:
-                halotab = TabCorr.read('smdpl_mvir.hdf5')
+                halotab = TabCorr.read('smdpl_halo_mvir.hdf5')
             return wp_vals, ng, ng_err, bin_edges, invcov, halotab
         
         elif self['data'] == "mock":
@@ -159,7 +159,7 @@ class hod_fit(fit_dict):
             halocat = CachedHaloCatalog(fname = '/home/lom31/Halo/hlist_1.00231.list.halotools_v0p1.hdf5',update_cached_fname = True)
             halocat.redshift=0.
         elif self['sim']== "smdpl":
-            halocat = CachedHaloCatalog(fname = '/home/lom31/Halo/hlist_1.00231.list.halotools_v0p1.hdf5',update_cached_fname=True)
+            halocat = CachedHaloCatalog(fname = '/home/lom31/Halo/smdpl.dat.smdpl2.hdf5',update_cached_fname=True)
             halocat.redshift=0.
             ht = halocat.halo_table
             vmax_ml = 10**(np.log10(ht['halo_vmax'])*3.2129514846864926+4.71149353971438)
@@ -170,11 +170,11 @@ class hod_fit(fit_dict):
         if self['data'] == "zehavi":
             data_file = self['data_file']
             if '19' in data_file:
-                Threshold = 19
+                Threshold = -19
             if '20' in data_file:
-                Threshold = 20
+                Threshold = -20
             if '21' in data_file:
-                Threshold = 21
+                Threshold = -21
             
         if self['param'] == 'mvir':
             cens_occ_model = Zheng07Cens(threshold=Threshold)
