@@ -25,13 +25,13 @@ from os import walk
 from astropy.table import Table 
 import logging
 
-threshold = -21
-dname = "zehavi_data_file_21"
+threshold = -20
+dname = "zehavi_data_file_20"
 param = "combo"
-output = 'combo_param_m21_a25.h5'
+output = 'combo_param_m20_a50.h5'
 
 #guess = [ 0.5, 13., 0.5, 1.6, 12.06, 13.]
-guess = [ 0.25, 13., 0.5, 1.6, 12.06, 13.]
+guess = [ 0.50, 11.9, 0.2, 1., 12.4, 13.]
 backend = emcee.backends.HDFBackend(output)
 
 log_fname = str(output[0:-2])+'log'
@@ -134,13 +134,7 @@ gc.collect()
 def _get_lnlike(theta):
     a,logMmin,sigma_logM,alpha,logM0, logM1 = theta
 
-    if round(a,2) == 0.0:
-        model_instance = mod_names_dict['smdpl_combo_a0.01.hdf5']
-        print('smdpl_combo_a0.01.hdf5')
-    elif round(a,2) == 0.9:
-        model_instance = mod_names_dict['smdpl_combo_a0.91.hdf5']
-    else:
-        model_instance = mod_names_dict['smdpl_combo_a{}.hdf5'.format(round(a,2))]
+    model_instance = mod_names_dict['smdpl_combo_a{}.hdf5'.format(round(a,2))]
 
     #model_instance = _get_model_inst(a)
     model_instance.param_dict['logMmin'] = logMmin
@@ -176,12 +170,7 @@ def _get_lnlike(theta):
     ng_diff = ng-model_instance.mock.number_density
     """
 
-    if round(a,2) == 0.0:
-        ngal,wp = _get_wp_ng(model_instance,'smdpl_combo_a0.01.hdf5')
-    elif round(a,2) == 0.9:
-        ngal,wp = _get_wp_ng(model_instance,'smdpl_combo_a0.91.hdf5')
-    else:
-        ngal,wp = _get_wp_ng(model_instance,'smdpl_combo_a{}.hdf5'.format(round(a,2)))
+    ngal,wp = _get_wp_ng(model_instance,'smdpl_combo_a{}.hdf5'.format(round(a,2)))
     
     #ngal, wp = halotab.predict(model_instance)
     wp_diff = wp_vals-wp
@@ -209,12 +198,12 @@ logger.info('ndim, nwalkers, nsteps: {},{},{}'.format(ndim,nwalkers,nsteps))
 
 #guess = [0.558, 8.172, 0.200, 1.411, 8.373, 8.937]
 pos = [guess + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
-backend.reset(nwalkers, ndim)
+#backend.reset(nwalkers, ndim)
 with Pool(15) as pool:
     sampler = emcee.EnsembleSampler(nwalkers, ndim, _get_lnprob,
                                     backend=backend, pool=pool)
     start = time.time()
-    sampler.run_mcmc(pos, nsteps,progress=False)
+    sampler.run_mcmc(pos, nsteps,progress=True)
     end = time.time()
 multi_time = end-start
 print("Multiprocessing took {0:.1f} seconds".format(multi_time))

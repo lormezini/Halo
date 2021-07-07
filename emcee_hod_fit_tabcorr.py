@@ -120,7 +120,7 @@ class fit_dict(dict):
 
             gc.collect()
             if 'vmax' in self['param']:
-                halotab = TabCorr.read('smdpl_vmax_ml.hdf5')
+                halotab = TabCorr.read('smdpl_vmax_ml_2.hdf5')
             else:
                 halotab = TabCorr.read('smdpl_halo_mvir.hdf5')
             return wp_vals, ng, ng_err, bin_edges, invcov, halotab
@@ -161,9 +161,6 @@ class hod_fit(fit_dict):
         elif self['sim']== "smdpl":
             halocat = CachedHaloCatalog(fname = '/home/lom31/Halo/smdpl.dat.smdpl2.hdf5',update_cached_fname=True)
             halocat.redshift=0.
-            ht = halocat.halo_table
-            vmax_ml = 10**(np.log10(ht['halo_vmax'])*3.2129514846864926+4.71149353971438)
-            ht.add_column(vmax_ml, name='vmax_ml')
         elif self['sim'] == "mdr1":
             halocat = CachedHaloCatalog(fname = '/home/lom31/.astropy/cache/halotools/halo_catalogs/multidark/rockstar/hlist_0.68215.list.halotools_v0p4.hdf5',update_cached_fname = True)
         
@@ -190,15 +187,6 @@ class hod_fit(fit_dict):
                                          modulate_with_cenocc=True,
                                          threshold=Threshold)
             sats_prof_model = NFWPhaseSpace()
-        elif self['param'] == 'vmax_ml':
-            cens_occ_model = Zheng07Cens(prim_haloprop_key = 'vmax_ml',
-                                         threshold=Threshold)
-            cens_prof_model = TrivialPhaseSpace()
-            sats_occ_model = Zheng07Sats(prim_haloprop_key = 'vmax_ml',
-                                         modulate_with_cenocc=True,
-                                         threshold=Threshold)
-            sats_prof_model = NFWPhaseSpace()
-
         
         gc.collect()
         global model_instance
@@ -281,7 +269,7 @@ def main(args):
         sampler = emcee.EnsembleSampler(nwalkers, ndim, hod._get_lnprob, 
                                         pool=pool,backend=backend)
         #start = time.time()
-        sampler.run_mcmc(pos, nsteps, progress=False, store=True)
+        sampler.run_mcmc(pos, nsteps, progress=True, store=True)
         #end = time.time()
         #multi_time = end - start
         #print("Multiprocessing took {0:.1f} seconds".format(multi_time))
