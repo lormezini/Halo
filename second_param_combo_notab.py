@@ -26,10 +26,10 @@ import logging
 threshold = -20
 dname = "zehavi_data_file_20"
 param = "pseudo"
-output = 'test.h5'#mass_concentration_fit_m20.h5'
+output = 'mass_concentration_fit_m20_notab.h5'
 
 #guess = [ 0.5, 13., 0.5, 1.6, 12.06, 13.]
-guess = [-0.05063409, 11.89309241, 0.02309348, 1.01309299, 12.31177975, 13.18503963]
+guess = [-0.06280481, 11.93011227, 0.2558386, 1.03464175, 12.17365275, 13.21302311]
 backend = emcee.backends.HDFBackend(output)
 
 log_fname = str(output[0:-2])+'log'
@@ -111,17 +111,16 @@ delta = np.concatenate(delta)[np.argsort(mass)[::-1]]
 con = np.concatenate(con)[np.argsort(mass)[::-1]]
 mass = mass[np.argsort(mass)[::-1]]
 
-halocat.halo_table.add_column(delta, name='delta')
-
 pi_max = 60.
 Lbox = 400.
 
-
+gc.collect()
 
 def _get_model_inst(a):
 
-    halocat.halo_table.add_column(mass*10**(a*delta),name='pseudo')
+    halocat.halo_table['pseudo'] = mass*10**(a*delta)
 
+    print(halocat.halo_table['pseudo'][np.isinf(halocat.halo_table['pseudo'])])
     cens_occ_model = Zheng07Cens(prim_haloprop_key = 'pseudo',
                                  threshold=threshold)
     cens_prof_model = TrivialPhaseSpace()
@@ -142,6 +141,8 @@ def _get_model_inst(a):
         model_instance.populate_mock(halocat)
 
     del(halocat.halo_table['pseudo'])
+    gc.collect()
+    
     return model_instance
 
 
@@ -156,7 +157,13 @@ def _get_lnlike(theta):
     model_instance.param_dict['logM0'] = logM0
     model_instance.param_dict['logM1'] = logM1
 
+    est_ngals = model_instance.mock.estimate_ngals()
+    if est_ngals/(400**3) > 2*ng:
+        print("True")
+        return -np.inf
+
     model_instance.mock.populate()
+    gc.collect()
     Lbox = 400.
     pos = return_xyz_formatted_array(model_instance.mock.galaxy_table['x'],
                                          model_instance.mock.galaxy_table['y'],
@@ -178,8 +185,11 @@ def _get_lnlike(theta):
     wp_diff = wp_vals-wp_calc['wp']
     ng_diff = ng-model_instance.mock.number_density
 
-    gc.collect()
-    
+
+    if model_instance.mock.number_density > ng*2:
+        print("True")
+        return -np.inf
+
     return -0.5*np.dot(wp_diff, np.dot(invcov, wp_diff)) + -0.5*(ng_diff**2)/(ng_err**2)
 
 def _get_lnprior(theta):
@@ -201,7 +211,7 @@ logger.info('ndim, nwalkers, nsteps: {},{},{}'.format(ndim,nwalkers,nsteps))
 #guess = [0.558, 8.172, 0.200, 1.411, 8.373, 8.937]
 pos = [guess + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
 #backend.reset(nwalkers, ndim)
-with Pool(15) as pool:
+with Pool(10) as pool:
     sampler = emcee.EnsembleSampler(nwalkers, ndim, _get_lnprob,
                                     backend=backend, pool=pool)
     start = time.time()
